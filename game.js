@@ -23,7 +23,6 @@
   let loopId = null;
 
   let remoteLength = START_LENGTH;
-  let remoteState = "dead";
   let lastPostUrl = "";
 
   function setStatus(t) {
@@ -35,63 +34,21 @@
     applesEl.textContent = score;
   }
 
-  // 🟩 PARSE POST — AHORA LEE "Snake length: X" Y "LENGTH: X"
-  function parsePost(text) {
-    const lengthMatch = text.match(/(?:Snake\s+length|LENGTH):\s*(\d+)/i);
-
-    return {
-      length: lengthMatch ? parseInt(lengthMatch[1], 10) : START_LENGTH,
-      state: "dead" // ya no usamos STATE
-    };
-  }
-
-  // 🟩 LOADER — SIN CAMBIAR NADA MÁS
+  // 🟩 CARGA DEL ARCHIVO DEL BOT — YA NO USA BLUESKY
   async function loadRemoteState() {
     try {
-      const url =
-        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=" +
-        encodeURIComponent("#snakesky") +
-        "&limit=20";
+      const url = "https://raw.githubusercontent.com/Bunesky/perfectsky-post-bot/main/snakesky.json";
 
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
 
-      const posts = data.posts || data.feed || [];
-
-      if (!Array.isArray(posts) || posts.length === 0) {
-        setStatus("No #snakesky posts found");
-        return;
-      }
-
-      const normalized = posts
-        .map(p => p.post || p)
-        .filter(p => p?.record?.text);
-
-      if (!normalized.length) {
-        setStatus("No valid posts");
-        return;
-      }
-
-      normalized.sort(
-        (a, b) =>
-          new Date(b.indexedAt || 0) - new Date(a.indexedAt || 0)
-      );
-
-      const last = normalized[0];
-      const text = last.record.text;
-
-      const parsed = parsePost(text);
-
-      remoteLength = parsed.length;
-      remoteState = parsed.state;
-
-      const rkey = last.uri.split("/").pop();
-      lastPostUrl = `https://bsky.app/profile/${last.author.handle}/post/${rkey}`;
+      remoteLength = data.length || START_LENGTH;
+      lastPostUrl = data.post || "";
 
       setStatus(`Loaded: ${remoteLength}`);
     } catch (e) {
       console.error(e);
-      setStatus("Failed to load Bluesky state");
+      setStatus("Failed to load snakesky.json");
     }
   }
 
@@ -201,7 +158,7 @@
   function bindUI() {
     startBtn.onclick = startGame;
 
-    // 🟩 SHARE — AHORA GENERA TU FORMATO NUEVO
+    // 🟩 SHARE — FORMATO FINAL
     shareBtn.onclick = () => {
       const text =
 `🐍 #snakesky
