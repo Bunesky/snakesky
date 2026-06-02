@@ -302,7 +302,7 @@
     shareBtn.onclick = () => {
       const text =
 `🐍 #snakesky
-🎮 https://bunesky.github.io/snakesky/
+🎮 https://bunesky.itch.io/snakesky
 📏 LENGTH: ${snake.length}`;
 
       navigator.clipboard.writeText(text);
