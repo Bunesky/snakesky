@@ -23,14 +23,13 @@
   let loopId = null;
   let lastRenderSize = 0;
 
-  let swipeStart = null;
-
   // =========================
-  // 🟦 ATPROTO STATE
+  // 🌐 GLOBAL STATE (ATPROTO)
   // =========================
   let remoteStartLength = START_LENGTH;
   let lastPostUrl = "";
   let lastAuthor = "";
+  let lastPostText = "";
 
   function setStatus(text) {
     statusEl.textContent = text;
@@ -42,58 +41,79 @@
   }
 
   // =========================
-  // 🟦 ATPROTO: FETCH LAST #snakesky POST
+  // 🌐 LOAD LAST #snakesky POST
   // =========================
   async function loadRemoteState() {
     try {
       const res = await fetch(
-        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%23snakesky&limit=10"
+        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%23snakesky&limit=20"
       );
 
       const data = await res.json();
       const posts = data.posts || [];
 
-      if (!posts.length) return;
+      if (!posts.length) {
+        setStatus("No remote state found.");
+        return;
+      }
 
+      // Ensure newest first
       const last = posts[0];
+
       const text = last.record?.text || "";
+      const author = last.author?.handle || "unknown";
+      const uri = last.uri || "";
 
-      lastAuthor = last.author?.handle || "";
-      lastPostUrl = `https://bsky.app/profile/${last.author.handle}/post/${last.uri.split("/").pop()}`;
+      lastAuthor = author;
+      lastPostText = text;
 
-      // extract length
-      const match = text.match(/length:\s*(\d+)/i);
-      if (match) {
+      const postId = uri.split("/").pop();
+      lastPostUrl = `https://bsky.app/profile/${author}/post/${postId}`;
+
+      // =========================
+      // 🧠 EXTRACT LENGTH
+      // =========================
+      // supports:
+      // 📏 Snake length: 17
+      // 📏 Final snake length: 17
+      const match = text.match(/length\s*:\s*(\d+)/i);
+
+      if (match && match[1]) {
         remoteStartLength = Math.max(3, parseInt(match[1], 10));
       }
 
-      setStatus(`Loaded world state from @${lastAuthor}`);
-    } catch (e) {
-      console.log("ATProto load failed", e);
+      setStatus(`World loaded from @${author}`);
+    } catch (err) {
+      console.log("ATProto error:", err);
+      setStatus("Offline mode (no remote state).");
     }
   }
 
+  // =========================
+  // 🧱 RESIZE
+  // =========================
   function resizeCanvas() {
-    const size = Math.min(
-      Math.floor(window.innerWidth * 0.92),
-      560
-    );
+    const size = Math.min(Math.floor(window.innerWidth * 0.92), 560);
 
     const wrap = canvas.parentElement;
     wrap.style.width = `${size}px`;
     wrap.style.height = `${size}px`;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(size * dpr);
-    canvas.height = Math.floor(size * dpr);
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     lastRenderSize = size;
-    render();
+
+    drawFrame();
   }
 
+  // =========================
+  // 🎮 GAME START
+  // =========================
   function startGame() {
-    const len = running ? snake.length : remoteStartLength;
+    const len = remoteStartLength || START_LENGTH;
 
     snake = [];
     for (let i = 0; i < len; i++) {
@@ -108,13 +128,14 @@
 
     placeApple();
     setStats();
-    setStatus("Running. Stay sharp.");
 
     startBtn.textContent = "Restart";
-    drawFrame();
+    setStatus("Running...");
 
-    if (loopId) clearInterval(loopId);
+    clearInterval(loopId);
     loopId = setInterval(tick, TICK_MS);
+
+    drawFrame();
   }
 
   function endGame() {
@@ -124,11 +145,15 @@
     clearInterval(loopId);
     loopId = null;
 
-    setStatus("Game over. Share your run!");
+    setStatus("Game over. Share your run.");
     startBtn.textContent = "Play Again";
-    drawFrame(true);
+
+    drawFrame();
   }
 
+  // =========================
+  // ⏱ GAME LOOP
+  // =========================
   function tick() {
     if (!running) return;
 
@@ -136,15 +161,15 @@
 
     const head = { ...snake[0] };
 
-    if (direction === "up") head.y -= 1;
-    if (direction === "down") head.y += 1;
-    if (direction === "left") head.x -= 1;
-    if (direction === "right") head.x += 1;
+    if (direction === "up") head.y--;
+    if (direction === "down") head.y++;
+    if (direction === "left") head.x--;
+    if (direction === "right") head.x++;
 
     if (
       head.x < 0 ||
-      head.x >= TILE_COUNT ||
       head.y < 0 ||
+      head.x >= TILE_COUNT ||
       head.y >= TILE_COUNT
     ) {
       endGame();
@@ -159,7 +184,7 @@
     snake.unshift(head);
 
     if (head.x === apple.x && head.y === apple.y) {
-      score += 1;
+      score++;
       placeApple();
     } else {
       snake.pop();
@@ -189,54 +214,54 @@
   }
 
   // =========================
-  // 🟦 SHARE (UPDATED FOR ATPROTO FORMAT)
+  // 📤 SHARE FORMAT (FIXED)
   // =========================
   function buildShareText() {
-    const apples = snake.length - remoteStartLength;
-
     return `🐍 I played #snakesky
-🔗 ${lastPostUrl || window.location.href}
-📏 Final snake length: ${snake.length}`;
+🔗 ${window.location.href}
+📏 Snake length: ${snake.length}`;
   }
 
   async function shareRun() {
     const text = buildShareText();
 
-    if (navigator.share) {
-      navigator.share({ text });
-    } else {
-      navigator.clipboard.writeText(text);
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      setStatus("Shared.");
+    } catch (e) {
+      setStatus("Share failed.");
     }
-
-    setStatus("Run shared.");
   }
 
+  // =========================
+  // 🎨 RENDER
+  // =========================
   function drawFrame() {
     const size = lastRenderSize;
     if (!size) return;
 
     ctx.clearRect(0, 0, size, size);
 
-    drawSnake();
-    drawApple();
-  }
+    const cell = size / TILE_COUNT;
 
-  function drawSnake() {
-    const size = lastRenderSize / TILE_COUNT;
-
+    // snake
     ctx.fillStyle = "#3ea6ff";
     snake.forEach(s => {
-      ctx.fillRect(s.x * size, s.y * size, size - 2, size - 2);
+      ctx.fillRect(s.x * cell, s.y * cell, cell - 2, cell - 2);
     });
-  }
 
-  function drawApple() {
-    const size = lastRenderSize / TILE_COUNT;
-
+    // apple
     ctx.fillStyle = "#ff5c7a";
-    ctx.fillRect(apple.x * size, apple.y * size, size - 2, size - 2);
+    ctx.fillRect(apple.x * cell, apple.y * cell, cell - 2, cell - 2);
   }
 
+  // =========================
+  // UI
+  // =========================
   function bindUI() {
     startBtn.addEventListener("click", startGame);
     shareBtn.addEventListener("click", shareRun);
@@ -254,7 +279,8 @@
     bindUI();
     resizeCanvas();
 
-    // ATPROTO LOAD
+    setStatus("Loading world...");
+
     await loadRemoteState();
 
     setStats();
