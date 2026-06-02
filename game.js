@@ -2,12 +2,11 @@
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
-  const lengthEl = document.getElementById("length");
-  const applesEl = document.getElementById("apples");
-  const statusEl = document.getElementById("status");
   const startBtn = document.getElementById("start");
   const shareBtn = document.getElementById("share");
   const dirButtons = [...document.querySelectorAll("[data-dir]")];
+
+  const statusEl = document.getElementById("status") || { textContent: "" };
 
   const TILE_COUNT = 20;
   const START_LENGTH = 3;
@@ -23,18 +22,12 @@
   let loopId = null;
 
   let remoteLength = START_LENGTH;
-  let lastPostUrl = "";
 
   function setStatus(t) {
-    statusEl.textContent = t;
+    if (statusEl) statusEl.textContent = t;
   }
 
-  function setStats() {
-    lengthEl.textContent = snake.length;
-    applesEl.textContent = score;
-  }
-
-  // 🟩 CARGA DEL ARCHIVO DEL BOT — YA NO USA BLUESKY
+  // 🟩 CARGA DEL ARCHIVO DEL BOT
   async function loadRemoteState() {
     try {
       const url = "https://raw.githubusercontent.com/Bunesky/perfectsky-post-bot/main/snakesky.json";
@@ -43,7 +36,11 @@
       const data = await res.json();
 
       remoteLength = data.length || START_LENGTH;
-      lastPostUrl = data.post || "";
+
+      // 🟩 ACTUALIZAR PANEL
+      document.getElementById("world-user").textContent = data.player;
+      document.getElementById("world-length").textContent = "🐍 " + data.length;
+      document.getElementById("world-link").href = data.post;
 
       setStatus(`Loaded: ${remoteLength}`);
     } catch (e) {
@@ -67,7 +64,6 @@
     gameOver = false;
 
     placeApple();
-    setStats();
     setStatus("Running");
 
     if (loopId) clearInterval(loopId);
@@ -117,7 +113,6 @@
       snake.pop();
     }
 
-    setStats();
     draw();
   }
 
@@ -158,7 +153,6 @@
   function bindUI() {
     startBtn.onclick = startGame;
 
-    // 🟩 SHARE — FORMATO FINAL
     shareBtn.onclick = () => {
       const text =
 `🐍 #snakesky
