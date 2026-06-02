@@ -23,7 +23,6 @@
   let loopId = null;
   let lastRenderSize = 0;
 
-  // 🟣 WORLD STATE
   let remoteLength = START_LENGTH;
   let remoteState = "dead";
   let lastPostUrl = "";
@@ -37,9 +36,6 @@
     applesEl.textContent = score;
   }
 
-  // =========================
-  // 🟢 PARSE POST
-  // =========================
   function parsePost(text) {
     const lengthMatch = text.match(/LENGTH:\s*(\d+)/i);
     const stateMatch = text.match(/STATE:\s*(alive|dead)/i);
@@ -50,48 +46,60 @@
     };
   }
 
-  // =========================
-  // 🟢 LOAD WORLD STATE
-  // =========================
+  // 🟩 FIXED LOADER
   async function loadRemoteState() {
     try {
-      const res = await fetch(
-        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%23snakesky&limit=10"
+      const url =
+        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=" +
+        encodeURIComponent("#snakesky") +
+        "&limit=20";
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const posts = data.posts || data.feed || [];
+
+      if (!Array.isArray(posts) || posts.length === 0) {
+        setStatus("No #snakesky posts found");
+        return;
+      }
+
+      // normalizar estructura
+      const normalized = posts
+        .map(p => p.post || p)
+        .filter(p => p?.record?.text);
+
+      if (!normalized.length) {
+        setStatus("No valid posts");
+        return;
+      }
+
+      // ordenar por fecha (IMPORTANTE)
+      normalized.sort(
+        (a, b) =>
+          new Date(b.indexedAt || 0) - new Date(a.indexedAt || 0)
       );
 
-      const data = await res.json();
-      const posts = data.posts || [];
-
-      if (!posts.length) return;
-
-      const last = posts[0];
-      const text = last.record?.text || "";
-
-      if (!text.includes("#snakesky")) return;
+      const last = normalized[0];
+      const text = last.record.text;
 
       const parsed = parsePost(text);
 
       remoteLength = parsed.length;
       remoteState = parsed.state;
 
-      lastPostUrl =
-        `https://bsky.app/profile/${last.author.handle}/post/${last.uri.split("/").pop()}`;
+      const rkey = last.uri.split("/").pop();
+      lastPostUrl = `https://bsky.app/profile/${last.author.handle}/post/${rkey}`;
 
-      setStatus(`Loaded world: ${remoteState} (${remoteLength})`);
-
+      setStatus(`Loaded: ${remoteState} (${remoteLength})`);
     } catch (e) {
-      console.log("load error", e);
+      console.error(e);
+      setStatus("Failed to load Bluesky state");
     }
   }
 
   function startGame() {
-    let len;
-
-    if (remoteState === "alive") {
-      len = remoteLength;
-    } else {
-      len = START_LENGTH;
-    }
+    let len = remoteState === "alive" ? remoteLength : START_LENGTH;
 
     snake = [];
     for (let i = 0; i < len; i++) {
@@ -115,11 +123,8 @@
   function endGame() {
     running = false;
     gameOver = true;
-
     clearInterval(loopId);
-    loopId = null;
-
-    setStatus("Game over — post your run!");
+    setStatus("Game over — share run");
   }
 
   function tick() {
@@ -171,7 +176,6 @@
 
   function draw() {
     const size = canvas.width;
-
     ctx.clearRect(0, 0, size, size);
 
     const cell = size / TILE_COUNT;
@@ -199,6 +203,7 @@
 
   function bindUI() {
     startBtn.onclick = startGame;
+
     shareBtn.onclick = () => {
       const text =
 `🐍 #snakesky
@@ -207,7 +212,7 @@ STATE: ${gameOver ? "dead" : "alive"}
 URL: ${window.location.href}`;
 
       navigator.clipboard.writeText(text);
-      setStatus("Copied post text");
+      setStatus("Copied");
     };
 
     dirButtons.forEach(b =>
