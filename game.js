@@ -23,97 +23,75 @@
   let loopId = null;
   let lastRenderSize = 0;
 
-  // =========================
-  // 🌐 GLOBAL STATE (ATPROTO)
-  // =========================
-  let remoteStartLength = START_LENGTH;
+  // 🟣 WORLD STATE
+  let remoteLength = START_LENGTH;
+  let remoteState = "dead";
   let lastPostUrl = "";
-  let lastAuthor = "";
-  let lastPostText = "";
 
-  function setStatus(text) {
-    statusEl.textContent = text;
+  function setStatus(t) {
+    statusEl.textContent = t;
   }
 
   function setStats() {
-    lengthEl.textContent = String(snake.length);
-    applesEl.textContent = String(score);
+    lengthEl.textContent = snake.length;
+    applesEl.textContent = score;
   }
 
   // =========================
-  // 🌐 LOAD LAST #snakesky POST
+  // 🟢 PARSE POST
+  // =========================
+  function parsePost(text) {
+    const lengthMatch = text.match(/LENGTH:\s*(\d+)/i);
+    const stateMatch = text.match(/STATE:\s*(alive|dead)/i);
+
+    return {
+      length: lengthMatch ? parseInt(lengthMatch[1], 10) : START_LENGTH,
+      state: stateMatch ? stateMatch[1].toLowerCase() : "dead"
+    };
+  }
+
+  // =========================
+  // 🟢 LOAD WORLD STATE
   // =========================
   async function loadRemoteState() {
     try {
       const res = await fetch(
-        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%23snakesky&limit=20"
+        "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%23snakesky&limit=10"
       );
 
       const data = await res.json();
       const posts = data.posts || [];
 
-      if (!posts.length) {
-        setStatus("No remote state found.");
-        return;
-      }
+      if (!posts.length) return;
 
-      // Ensure newest first
       const last = posts[0];
-
       const text = last.record?.text || "";
-      const author = last.author?.handle || "unknown";
-      const uri = last.uri || "";
 
-      lastAuthor = author;
-      lastPostText = text;
+      if (!text.includes("#snakesky")) return;
 
-      const postId = uri.split("/").pop();
-      lastPostUrl = `https://bsky.app/profile/${author}/post/${postId}`;
+      const parsed = parsePost(text);
 
-      // =========================
-      // 🧠 EXTRACT LENGTH
-      // =========================
-      // supports:
-      // 📏 Snake length: 17
-      // 📏 Final snake length: 17
-      const match = text.match(/length\s*:\s*(\d+)/i);
+      remoteLength = parsed.length;
+      remoteState = parsed.state;
 
-      if (match && match[1]) {
-        remoteStartLength = Math.max(3, parseInt(match[1], 10));
-      }
+      lastPostUrl =
+        `https://bsky.app/profile/${last.author.handle}/post/${last.uri.split("/").pop()}`;
 
-      setStatus(`World loaded from @${author}`);
-    } catch (err) {
-      console.log("ATProto error:", err);
-      setStatus("Offline mode (no remote state).");
+      setStatus(`Loaded world: ${remoteState} (${remoteLength})`);
+
+    } catch (e) {
+      console.log("load error", e);
     }
   }
 
-  // =========================
-  // 🧱 RESIZE
-  // =========================
-  function resizeCanvas() {
-    const size = Math.min(Math.floor(window.innerWidth * 0.92), 560);
-
-    const wrap = canvas.parentElement;
-    wrap.style.width = `${size}px`;
-    wrap.style.height = `${size}px`;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    lastRenderSize = size;
-
-    drawFrame();
-  }
-
-  // =========================
-  // 🎮 GAME START
-  // =========================
   function startGame() {
-    const len = remoteStartLength || START_LENGTH;
+    let len;
+
+    if (remoteState === "alive") {
+      len = remoteLength;
+    } else {
+      len = START_LENGTH;
+    }
 
     snake = [];
     for (let i = 0; i < len; i++) {
@@ -128,14 +106,10 @@
 
     placeApple();
     setStats();
+    setStatus("Running");
 
-    startBtn.textContent = "Restart";
-    setStatus("Running...");
-
-    clearInterval(loopId);
+    if (loopId) clearInterval(loopId);
     loopId = setInterval(tick, TICK_MS);
-
-    drawFrame();
   }
 
   function endGame() {
@@ -145,15 +119,9 @@
     clearInterval(loopId);
     loopId = null;
 
-    setStatus("Game over. Share your run.");
-    startBtn.textContent = "Play Again";
-
-    drawFrame();
+    setStatus("Game over — post your run!");
   }
 
-  // =========================
-  // ⏱ GAME LOOP
-  // =========================
   function tick() {
     if (!running) return;
 
@@ -191,7 +159,7 @@
     }
 
     setStats();
-    drawFrame();
+    draw();
   }
 
   function placeApple() {
@@ -201,7 +169,23 @@
     };
   }
 
-  function changeDirection(dir) {
+  function draw() {
+    const size = canvas.width;
+
+    ctx.clearRect(0, 0, size, size);
+
+    const cell = size / TILE_COUNT;
+
+    ctx.fillStyle = "#ff5c7a";
+    ctx.fillRect(apple.x * cell, apple.y * cell, cell - 2, cell - 2);
+
+    ctx.fillStyle = "#3ea6ff";
+    snake.forEach(s => {
+      ctx.fillRect(s.x * cell, s.y * cell, cell - 2, cell - 2);
+    });
+  }
+
+  function changeDirection(d) {
     const opposite = {
       up: "down",
       down: "up",
@@ -209,82 +193,39 @@
       right: "left"
     };
 
-    if (dir === opposite[direction]) return;
-    queuedDirection = dir;
+    if (d === opposite[direction]) return;
+    queuedDirection = d;
   }
 
-  // =========================
-  // 📤 SHARE FORMAT (FIXED)
-  // =========================
-  function buildShareText() {
-    return `🐍 I played #snakesky
-🔗 ${window.location.href}
-📏 Snake length: ${snake.length}`;
-  }
-
-  async function shareRun() {
-    const text = buildShareText();
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ text });
-      } else {
-        await navigator.clipboard.writeText(text);
-      }
-      setStatus("Shared.");
-    } catch (e) {
-      setStatus("Share failed.");
-    }
-  }
-
-  // =========================
-  // 🎨 RENDER
-  // =========================
-  function drawFrame() {
-    const size = lastRenderSize;
-    if (!size) return;
-
-    ctx.clearRect(0, 0, size, size);
-
-    const cell = size / TILE_COUNT;
-
-    // snake
-    ctx.fillStyle = "#3ea6ff";
-    snake.forEach(s => {
-      ctx.fillRect(s.x * cell, s.y * cell, cell - 2, cell - 2);
-    });
-
-    // apple
-    ctx.fillStyle = "#ff5c7a";
-    ctx.fillRect(apple.x * cell, apple.y * cell, cell - 2, cell - 2);
-  }
-
-  // =========================
-  // UI
-  // =========================
   function bindUI() {
-    startBtn.addEventListener("click", startGame);
-    shareBtn.addEventListener("click", shareRun);
+    startBtn.onclick = startGame;
+    shareBtn.onclick = () => {
+      const text =
+`🐍 #snakesky
+LENGTH: ${snake.length}
+STATE: ${gameOver ? "dead" : "alive"}
+URL: ${window.location.href}`;
 
-    dirButtons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        changeDirection(btn.dataset.dir);
-      });
+      navigator.clipboard.writeText(text);
+      setStatus("Copied post text");
+    };
+
+    dirButtons.forEach(b =>
+      b.onclick = () => changeDirection(b.dataset.dir)
+    );
+
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowUp") changeDirection("up");
+      if (e.key === "ArrowDown") changeDirection("down");
+      if (e.key === "ArrowLeft") changeDirection("left");
+      if (e.key === "ArrowRight") changeDirection("right");
     });
-
-    window.addEventListener("resize", resizeCanvas);
   }
 
   async function init() {
     bindUI();
-    resizeCanvas();
-
-    setStatus("Loading world...");
-
     await loadRemoteState();
-
-    setStats();
-    setStatus("Ready.");
+    setStatus("Ready");
   }
 
   init();
