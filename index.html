@@ -8,15 +8,22 @@
 
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
 <main class="app-shell">
 
+  <!-- =========================
+       🟦 GAME FIRST
+  ========================== -->
   <div class="canvas-wrap">
     <canvas id="game" aria-label="Snake game board"></canvas>
     <div class="canvas-glow"></div>
   </div>
 
+  <!-- =========================
+       🟦 CONTROLS
+  ========================== -->
   <div class="controls">
     <button class="dir-btn up" data-dir="up">▲</button>
 
@@ -27,27 +34,29 @@
     </div>
   </div>
 
+  <!-- =========================
+       🟦 ACTIONS
+  ========================== -->
   <div class="actions">
     <button id="start" class="primary-btn">Start Game</button>
     <button id="share" class="secondary-btn">Share Run</button>
   </div>
 
-  <div class="stats">
-    <div class="stat-card">
-      <span class="stat-label">Length</span>
-      <strong id="length">3</strong>
+  <!-- =========================
+       🟣 ATPROTO WORLD STATE
+       (NEW CORE IDEA)
+  ========================== -->
+  <section class="world-state">
+
+    <h3 class="world-title">Last run</h3>
+
+    <div class="world-card">
+      <div id="world-user">@loading...</div>
+      <div id="world-length">🐍 --</div>
+      <div id="world-link"></div>
     </div>
 
-    <div class="stat-card">
-      <span class="stat-label">Apples</span>
-      <strong id="apples">0</strong>
-    </div>
-
-    <div class="stat-card wide">
-      <span class="stat-label">Status</span>
-      <strong id="status">Ready to play.</strong>
-    </div>
-  </div>
+  </section>
 
 </main>
 
