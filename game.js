@@ -294,7 +294,7 @@
 
       const text =
 `🐍 #snakesky
-🎮 bunesky.itch.io/snakesky
+🎮 bunesky.itch.io/snakesky/
 📏 LENGTH: ${lengthToShare}`;
 
       navigator.clipboard.writeText(text);
