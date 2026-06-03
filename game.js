@@ -3,6 +3,7 @@
   const ctx = canvas.getContext("2d");
 
   const startBtn = document.getElementById("start");
+  const pauseBtn = document.getElementById("pause");
   const shareBtn = document.getElementById("share");
   const dirButtons = [...document.querySelectorAll("[data-dir]")];
 
@@ -22,6 +23,7 @@
   let score = 0;
   let running = false;
   let gameOver = false;
+  let paused = false;
   let loopId = null;
 
   let remoteLength = START_LENGTH;
@@ -33,36 +35,17 @@
 
   function resizeCanvas() {
     const size = Math.min(Math.floor(window.innerWidth * 0.92), 560);
-
     canvas.width = size;
     canvas.height = size;
-
     drawFrame();
   }
 
   function setStats() {
-    // Si no existen esos elementos en el HTML no rompe.
     const lengthEl = document.getElementById("length");
     const applesEl = document.getElementById("apples");
 
     if (lengthEl) lengthEl.textContent = String(snake.length);
     if (applesEl) applesEl.textContent = String(score);
-  }
-
-  function parseLengthFromPost(text) {
-    if (!text) return START_LENGTH;
-
-    // Acepta:
-    // LENGTH: 3
-    // Snake length: 3
-    // 📏 LENGTH: 3
-    let match = text.match(/(?:snake\s*)?length\s*:\s*(\d+)/i);
-    if (match) return Math.max(3, parseInt(match[1], 10));
-
-    match = text.match(/(\d+)/);
-    if (match) return Math.max(3, parseInt(match[1], 10));
-
-    return START_LENGTH;
   }
 
   async function loadRemoteState() {
@@ -71,24 +54,14 @@
         "https://raw.githubusercontent.com/Bunesky/perfectsky-post-bot/main/snakesky.json";
 
       const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
 
-      remoteLength = Math.max(
-        3,
-        parseInt(data.length, 10) || START_LENGTH
-      );
+      remoteLength = Math.max(3, parseInt(data.length, 10) || START_LENGTH);
 
-      if (worldUserEl) {
-        worldUserEl.textContent = data.player || "@unknown";
-      }
-
-      if (worldLengthEl) {
-        worldLengthEl.textContent = `🐍 ${remoteLength}`;
-      }
+      if (worldUserEl) worldUserEl.textContent = data.player || "@unknown";
+      if (worldLengthEl) worldLengthEl.textContent = `🐍 ${remoteLength}`;
 
       if (worldLinkEl) {
         lastPostUrl = data.post || "";
@@ -129,6 +102,7 @@
     score = 0;
     running = true;
     gameOver = false;
+    paused = false;
 
     placeApple();
     setStats();
@@ -138,6 +112,15 @@
 
     if (loopId) clearInterval(loopId);
     loopId = setInterval(tick, TICK_MS);
+  }
+
+  function pauseGame() {
+    if (!running || gameOver) return;
+    paused = true;
+    running = false;
+    clearInterval(loopId);
+    setStatus("Paused — share run");
+    drawFrame();
   }
 
   function endGame() {
@@ -258,7 +241,7 @@
     ctx.fillStyle = "rgba(255,255,255,0.95)";
     ctx.font = `700 ${Math.max(18, size * 0.055)}px system-ui, sans-serif`;
     ctx.fillText(
-      gameOver ? "Game Over" : "Ready to play",
+      gameOver ? "Game Over" : paused ? "Paused" : "Ready to play",
       size / 2,
       size / 2 - size * 0.04
     );
@@ -266,7 +249,11 @@
     ctx.fillStyle = "rgba(244,247,255,0.72)";
     ctx.font = `500 ${Math.max(12, size * 0.03)}px system-ui, sans-serif`;
     ctx.fillText(
-      gameOver ? "Tap Start Game to try again." : "Tap Start Game to begin.",
+      gameOver
+        ? "Tap Start Game to try again."
+        : paused
+        ? "Tap Share Run to publish."
+        : "Tap Start Game to begin.",
       size / 2,
       size / 2 + size * 0.03
     );
@@ -298,12 +285,17 @@
 
   function bindUI() {
     startBtn.onclick = startGame;
+    pauseBtn.onclick = pauseGame;
 
     shareBtn.onclick = () => {
+      let lengthToShare = snake.length;
+
+      if (gameOver) lengthToShare = START_LENGTH;
+
       const text =
 `🐍 #snakesky
 🎮 bunesky.itch.io/snakesky
-📏 LENGTH: ${snake.length}`;
+📏 LENGTH: ${lengthToShare}`;
 
       navigator.clipboard.writeText(text);
       setStatus("Copied");
